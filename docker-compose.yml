@@ -1,0 +1,145 @@
+# =============================================================================
+# DOCKER COMPOSE — Local Development Stack
+# =============================================================================
+# Docker Compose lets you define and run a multi-container application with
+# a single command: `docker compose up --build`
+#
+# WHAT IS DOCKER COMPOSE?
+# Instead of running 4 separate `docker run` commands with long flags, you
+# describe all your services, networks, and volumes in one YAML file.
+# Docker Compose reads this file and wires everything together automatically.
+#
+# HOW THE SERVICES COMMUNICATE:
+# All services below are on the same Docker network ("ecommerce-network").
+# Inside this network, each service is reachable by its SERVICE NAME as the
+# hostname. For example:
+#   - backend can reach MongoDB at:  mongo:27017
+#   - nginx (frontend) can reach backend at: backend:5000
+#   - Your browser reaches the app at: localhost:3000 (mapped from frontend:80)
+#
+# PORTS SECTION (HOST:CONTAINER):
+#   "3000:80"  means → your machine's port 3000 maps to container's port 80
+#   Open http://localhost:3000 in your browser to see the app.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MONGODB — The database
+  # ---------------------------------------------------------------------------
+  # This is the same service as before. No changes.
+  # ---------------------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: ecommerce-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"       # Expose to host for DB GUI tools (Compass, etc.)
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mongo_data:/data/db  # Named volume: data persists across container restarts
+    networks:
+      - ecommerce-network
+
+  # ---------------------------------------------------------------------------
+  # MONGO EXPRESS — MongoDB Web UI (dev tool, not for production)
+  # ---------------------------------------------------------------------------
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: ecommerce-mongo-express
+    restart: unless-stopped
+    depends_on:
+      - mongo                # Wait for mongo to start before starting this
+    ports:
+      - "8081:8081"          # Open http://localhost:8081 to browse the database
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: rootpassword
+      ME_CONFIG_MONGODB_SERVER: mongo  # Uses the service name as hostname
+    networks:
+      - ecommerce-network
+
+  # ---------------------------------------------------------------------------
+  # BACKEND — Express API
+  # ---------------------------------------------------------------------------
+  # "build" tells Compose to build an image from the Dockerfile in ./backend/
+  # instead of pulling a pre-built image from Docker Hub.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend     # Docker build context (where Dockerfile is)
+      dockerfile: Dockerfile
+    container_name: ecommerce-backend
+    restart: unless-stopped
+    depends_on:
+      - mongo                # Don't start until mongo is running
+    ports:
+      - "5000:5000"          # Expose for direct API testing (e.g., Postman)
+    environment:
+      # NODE_ENV: Keep as "development" so session cookies work over HTTP.
+      # In "production" mode, the backend sets cookies with secure:true which
+      # requires HTTPS. For local Docker testing, we use HTTP, so we keep
+      # this as development.
+      NODE_ENV: development
+
+      PORT: 5000
+
+      # Connect to the mongo SERVICE (not localhost!) because they're in the
+      # same Docker network. The hostname is the service name "mongo".
+      MONGODB_URI: mongodb://root:rootpassword@mongo:27017/olx_clone?authSource=admin
+
+      SESSION_SECRET: local-dev-secret-change-in-production
+
+      # The frontend runs at localhost:3000 on the host machine.
+      # CORS uses this to allow requests from the React app.
+      CLIENT_ORIGIN: http://localhost:3000
+    networks:
+      - ecommerce-network
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND — React app served by NGINX
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # VITE_API_URL is empty so the React app makes relative API calls
+        # like /api/auth/login. NGINX (in this container) then proxies those
+        # to http://backend:5000/api/auth/login inside the Docker network.
+        # This means the same built image works for Docker Compose AND Kubernetes.
+        VITE_API_URL: ""
+    container_name: ecommerce-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend              # Ensure backend is up before frontend starts
+    ports:
+      - "3000:80"            # Access the app at http://localhost:3000
+    networks:
+      - ecommerce-network
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+# A custom bridge network allows all services to communicate by name.
+# If you don't define one, Compose creates a default network, but explicitly
+# naming it makes the configuration clearer and easier to understand.
+# =============================================================================
+networks:
+  ecommerce-network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+# Named volumes are managed by Docker and persist on your host machine even
+# when containers are stopped or deleted. The actual data lives at:
+#   Linux/Mac: /var/lib/docker/volumes/ecommerce_mongo_data/_data
+#   Windows:   \\wsl$\docker-desktop-data\version-pack-data\community\docker\volumes\
+#
+# To WIPE the database and start fresh: docker compose down -v
+# =============================================================================
+volumes:
+  mongo_data:

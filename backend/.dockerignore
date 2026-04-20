@@ -1,0 +1,36 @@
+# =============================================================================
+# BACKEND .dockerignore
+# =============================================================================
+# Works exactly like .gitignore but for Docker's COPY/ADD commands.
+# Files listed here are EXCLUDED from the build context sent to Docker.
+#
+# WHY THIS MATTERS:
+# 1. node_modules  → We install fresh inside the container (npm ci).
+#                    Copying local node_modules would break things because
+#                    native binaries are compiled for your OS, not the
+#                    container's Linux environment.
+# 2. .env files    → Never bake secrets into an image. Secrets are injected
+#                    at runtime via environment variables.
+# 3. Large dirs    → Smaller build context = faster `docker build`.
+# =============================================================================
+
+# Dependencies — reinstalled inside the container
+node_modules
+
+# Env files — secrets are injected at runtime, never baked into the image
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Git history — not needed in the container
+.git
+.gitignore
+
+# Editor and OS files
+.DS_Store
+.vscode
+*.swp

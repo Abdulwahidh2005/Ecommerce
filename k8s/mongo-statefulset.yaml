@@ -1,0 +1,142 @@
+# =============================================================================
+# MONGODB — StatefulSet + Service
+# =============================================================================
+# This file defines TWO Kubernetes resources separated by "---".
+# YAML allows multiple documents in one file with the --- separator.
+#
+# Resource 1: Service    — stable network address so backend can find MongoDB
+# Resource 2: StatefulSet — runs the MongoDB container with persistent storage
+#
+# WHY STATEFULSET AND NOT DEPLOYMENT?
+# A Deployment is for STATELESS apps. Each pod is interchangeable.
+# A StatefulSet is for STATEFUL apps (databases). It provides:
+#   1. Stable, predictable pod names: mongo-0, mongo-1 (not random)
+#   2. Ordered startup and shutdown
+#   3. Each pod gets its OWN PersistentVolumeClaim (own storage)
+#      → If pod mongo-0 restarts, it reconnects to THE SAME disk
+#      → Data is NOT lost on pod restarts
+#
+# HOW PERSISTENT STORAGE WORKS IN KUBERNETES:
+#   PersistentVolume (PV):       A piece of actual storage (e.g., a host directory
+#                                in minikube, an EBS volume on AWS)
+#   PersistentVolumeClaim (PVC): A REQUEST for storage. Kubernetes finds a matching
+#                                PV and "binds" it to the PVC.
+#   volumeClaimTemplates:        StatefulSet creates a PVC automatically for each
+#                                pod replica. With 1 replica, 1 PVC is created.
+#
+# In minikube, the default StorageClass uses hostPath (a directory on the
+# minikube VM). This is fine for learning but NOT for production.
+# =============================================================================
+
+
+# =============================================================================
+# RESOURCE 1: MongoDB Service (ClusterIP)
+# =============================================================================
+# A Service gives a stable DNS name and IP address to a set of pods.
+# Pods come and go (they can crash and restart with new IPs), but the
+# Service IP/DNS stays the same. This is how the backend finds MongoDB.
+#
+# Type: ClusterIP (default) → only reachable INSIDE the cluster.
+# MongoDB should never be exposed to the internet!
+#
+# DNS: After creating this Service, any pod in the cluster can reach
+# MongoDB at hostname "mongo" on port 27017.
+# The full DNS name is: mongo.default.svc.cluster.local (but "mongo" works too)
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo            # This name becomes the hostname. Backend uses "mongo" in its URI.
+spec:
+  type: ClusterIP        # Internal-only. Not accessible from outside the cluster.
+  selector:
+    app: mongo           # Routes traffic to pods with label "app: mongo"
+  ports:
+    - port: 27017        # Port the Service listens on (what clients connect to)
+      targetPort: 27017  # Port on the pod (what MongoDB listens on inside the container)
+
+---
+
+# =============================================================================
+# RESOURCE 2: MongoDB StatefulSet
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  serviceName: mongo     # Must match the Service name above. Links the StatefulSet
+                         # to its governing Service for stable network identity.
+
+  replicas: 1            # Single MongoDB instance. For production, you'd use
+                         # a replica set (3+ pods) for high availability.
+
+  selector:
+    matchLabels:
+      app: mongo         # The StatefulSet manages pods with this label
+
+  template:              # This is the "pod template" — the blueprint for each pod
+    metadata:
+      labels:
+        app: mongo       # Must match selector.matchLabels above
+
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7               # Official MongoDB 7 image from Docker Hub
+
+          ports:
+            - containerPort: 27017     # The port MongoDB listens on inside the container
+
+          env:
+            # Root username is not sensitive, put directly here
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "root"
+
+            # Root password comes from the Secret (never hardcode passwords!)
+            # secretKeyRef tells Kubernetes: "find the Secret named 'ecommerce-secret'
+            # and give me the value for the key 'MONGO_ROOT_PASSWORD'"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ecommerce-secret
+                  key: MONGO_ROOT_PASSWORD
+
+          # Mount the persistent storage into the container at MongoDB's data path
+          volumeMounts:
+            - name: mongo-data         # Must match the name in volumeClaimTemplates
+              mountPath: /data/db      # Where MongoDB stores its data files
+
+          # Resource limits: prevents MongoDB from consuming all cluster resources
+          # requests: minimum guaranteed resources (used for pod scheduling)
+          # limits: maximum allowed (pod is killed if it exceeds this)
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"             # 250m = 0.25 CPU cores
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+  # ---------------------------------------------------------------------------
+  # volumeClaimTemplates — Automatic PVC creation per pod
+  # ---------------------------------------------------------------------------
+  # For each pod replica, Kubernetes creates a PVC based on this template.
+  # The PVC is named: <template-name>-<statefulset-name>-<ordinal>
+  # e.g.: mongo-data-mongo-0
+  #
+  # This PVC is NOT deleted when the pod restarts or even when the StatefulSet
+  # is deleted (unless you use --cascade=foreground or delete PVCs manually).
+  # This protects your data from accidental deletion.
+  # ---------------------------------------------------------------------------
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data               # Referenced in volumeMounts above
+      spec:
+        accessModes:
+          - ReadWriteOnce              # One node can read/write at a time
+                                       # (suitable for a single-instance database)
+        resources:
+          requests:
+            storage: 2Gi              # Request 2 GiB of disk space
+                                       # minikube provisions this from the VM's disk

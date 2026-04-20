@@ -1,0 +1,111 @@
+# =============================================================================
+# FRONTEND — Deployment + NodePort Service
+# =============================================================================
+# Two resources:
+#   1. Service (NodePort) → exposes the app to the outside world on port 30080
+#   2. Deployment         → runs the NGINX + React app pods
+#
+# WHAT IS NODEPORT?
+# Kubernetes has three main Service types:
+#
+#   ClusterIP   → Internal only (used for backend and mongo)
+#                 Reachable only from inside the cluster
+#
+#   NodePort    → Opens a port on EVERY node in the cluster (30000-32767 range)
+#                 Traffic hitting <node-ip>:<nodePort> routes to the Service pods
+#                 Perfect for minikube: access app at http://<minikube-ip>:30080
+#
+#   LoadBalancer → Provisions a cloud load balancer (AWS ELB, GCP LB, Azure LB)
+#                  Only works on cloud providers or with MetalLB addon
+#                  In minikube: stays "Pending" forever unless MetalLB is installed
+#
+# We use NodePort because it works out-of-the-box with minikube.
+# =============================================================================
+
+
+# =============================================================================
+# RESOURCE 1: Frontend Service (NodePort)
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: NodePort           # Exposes on a port on the minikube VM
+
+  selector:
+    app: frontend          # Routes to pods with label "app: frontend"
+
+  ports:
+    - port: 80             # ClusterIP port (internal cluster access)
+      targetPort: 80       # Port on the pod (NGINX listens on 80)
+      nodePort: 30080      # External port: access at http://<minikube-ip>:30080
+                           # Range must be 30000-32767
+                           # If you omit this, Kubernetes assigns a random port
+
+---
+
+# =============================================================================
+# RESOURCE 2: Frontend Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  labels:
+    app: frontend
+
+spec:
+  replicas: 1              # One NGINX pod serving static files + proxying API calls
+
+  selector:
+    matchLabels:
+      app: frontend
+
+  template:
+    metadata:
+      labels:
+        app: frontend
+
+    spec:
+      containers:
+        - name: frontend
+          # ---------------------------------------------------------------------------
+          # Build this image into minikube's Docker daemon before applying:
+          #   eval $(minikube docker-env)
+          #   docker build -t ecommerce-frontend ./frontend
+          # ---------------------------------------------------------------------------
+          image: ecommerce-frontend:latest
+          imagePullPolicy: Never       # Use the locally built image
+
+          ports:
+            - containerPort: 80        # NGINX serves on port 80
+
+          # -----------------------------------------------------------------------
+          # HEALTH PROBES
+          # For the frontend (static NGINX), we check that NGINX responds to HTTP.
+          # A request to / should always return 200 (index.html).
+          # -----------------------------------------------------------------------
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"

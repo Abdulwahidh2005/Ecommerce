@@ -1,0 +1,31 @@
+# =============================================================================
+# FRONTEND .dockerignore
+# =============================================================================
+# Excludes files from the Docker build context.
+# Smaller build context = faster `docker build` because Docker doesn't need
+# to send these files to the Docker daemon.
+# =============================================================================
+
+# Dependencies — reinstalled fresh inside the container by npm ci
+node_modules
+
+# Previous build output — the container builds its own fresh dist/
+dist
+
+# Env files — VITE_API_URL is passed as a Docker build argument instead
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Git history
+.git
+.gitignore
+
+# Editor and OS files
+.DS_Store
+.vscode
+*.swp
