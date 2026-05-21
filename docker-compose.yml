@@ -88,7 +88,7 @@ services:
 
       # Connect to the mongo SERVICE (not localhost!) because they're in the
       # same Docker network. The hostname is the service name "mongo".
-      MONGODB_URI: mongodb://root:rootpassword@mongo:27017/olx_clone?authSource=admin
+      MONGODB_URI: mongodb://root:rootpassword@mongo:27017/ecommerce?authSource=admin
 
       SESSION_SECRET: local-dev-secret-change-in-production
 

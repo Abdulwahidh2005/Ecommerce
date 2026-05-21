@@ -1,130 +1,58 @@
-# =============================================================================
-# BACKEND — Deployment + Service
-# =============================================================================
-# Two resources in one file (separated by ---):
-#   1. Service    → stable internal hostname "backend" for the frontend NGINX
-#   2. Deployment → runs and manages the Express API pods
-#
-# WHAT IS A DEPLOYMENT?
-# A Deployment tells Kubernetes "I want N copies of this pod running at all times."
-# Kubernetes continuously reconciles actual state → desired state:
-#   - If a pod crashes, it creates a new one
-#   - Rolling updates: gradually replaces old pods with new ones (zero downtime)
-#   - Rollback: instantly revert to previous version if something goes wrong
-#
-# DEPLOYMENT vs STATEFULSET (recap):
-#   Deployment  → stateless apps (Express, React, etc.) — pods are identical,
-#                 replaceable, no stable identity needed
-#   StatefulSet → stateful apps (databases) — pods need stable names and
-#                 their own persistent storage
-# =============================================================================
-
-
-# =============================================================================
-# RESOURCE 1: Backend Service (ClusterIP)
-# =============================================================================
-# The frontend NGINX (nginx.conf) proxies /api/ requests to http://backend:5000
-# This Service makes "backend" resolvable as a hostname inside the cluster.
-#
-# CRITICAL: This Service is named "backend" — the same name used in:
-#   1. docker-compose.yml (service name "backend")
-#   2. frontend/nginx.conf (proxy_pass http://backend:5000/api/)
-# All three use the same name so nginx.conf needs NO changes between environments.
-# =============================================================================
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend          # THIS NAME MUST STAY "backend" — referenced in nginx.conf
+  name: backend
 spec:
-  type: ClusterIP        # Internal only. Backend is NOT directly exposed to the internet.
-                         # Traffic reaches it only through the frontend NGINX proxy.
+  type: ClusterIP
   selector:
-    app: backend         # Routes traffic to pods labelled "app: backend"
+    app: backend
   ports:
-    - port: 5000         # Service listens on 5000
-      targetPort: 5000   # Forwards to port 5000 on the pod
-
+    - name: http
+      port: 5000
+      targetPort: 5000
 ---
-
-# =============================================================================
-# RESOURCE 2: Backend Deployment
-# =============================================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend-deployment
+  name: backend
   labels:
     app: backend
-
 spec:
-  replicas: 1            # Start with 1 pod. Increase to 2+ for high availability.
-                         # Because of session-based auth, scaling needs sticky sessions
-                         # or centralized session storage (already done via MongoDB).
-                         # So scaling IS safe here since sessions are in MongoDB.
-
+  replicas: 2
   selector:
     matchLabels:
-      app: backend       # This Deployment manages pods with this label
-
-  template:              # Pod blueprint
+      app: backend
+  template:
     metadata:
       labels:
-        app: backend     # Must match selector.matchLabels
-
+        app: backend
     spec:
       containers:
         - name: backend
-          # ---------------------------------------------------------------------------
-          # IMAGE: The Docker image to run.
-          # For minikube, you build this image into minikube's Docker daemon:
-          #   eval $(minikube docker-env)   ← point Docker CLI to minikube
-          #   docker build -t ecommerce-backend ./backend
-          # Then set imagePullPolicy: Never so K8s uses the local image.
-          # ---------------------------------------------------------------------------
           image: ecommerce-backend:latest
-          imagePullPolicy: Never         # Use local image built into minikube's Docker
-
+          imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 5000
-
-          # -----------------------------------------------------------------------
-          # ENV VARS: Pull from ConfigMap and Secret
-          # envFrom injects ALL keys from the referenced resource as env vars.
-          # This is cleaner than listing each key individually with "env:".
-          # -----------------------------------------------------------------------
+            - name: http
+              containerPort: 5000
           envFrom:
             - configMapRef:
-                name: ecommerce-config   # Injects: NODE_ENV, PORT, CLIENT_ORIGIN
+                name: ecommerce-config
             - secretRef:
-                name: ecommerce-secret   # Injects: MONGODB_URI, SESSION_SECRET
-
-          # -----------------------------------------------------------------------
-          # HEALTH PROBES
-          # Kubernetes uses probes to know if a pod is healthy.
-          #
-          # livenessProbe:  "Is the app still alive?" If this fails, K8s RESTARTS the pod.
-          # readinessProbe: "Is the app ready to serve traffic?" If this fails, K8s
-          #                 removes the pod from the Service's load balancer (no traffic).
-          #
-          # Our backend has a GET /api/health endpoint that returns {ok: true}.
-          # -----------------------------------------------------------------------
+                name: ecommerce-secret
           livenessProbe:
             httpGet:
               path: /api/health
-              port: 5000
-            initialDelaySeconds: 15    # Wait 15s after start before first check
-                                       # (gives Node.js time to connect to MongoDB)
-            periodSeconds: 20          # Check every 20 seconds
-            failureThreshold: 3        # Restart after 3 consecutive failures
-
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /api/health
-              port: 5000
+              port: http
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
-
           resources:
             requests:
               memory: "128Mi"

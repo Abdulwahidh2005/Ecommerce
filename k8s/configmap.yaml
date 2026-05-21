@@ -1,50 +1,8 @@
-# =============================================================================
-# KUBERNETES CONFIGMAP
-# =============================================================================
-# A ConfigMap stores NON-SENSITIVE configuration data as key-value pairs.
-# Pods (containers) can read these values as environment variables.
-#
-# RULE OF THUMB:
-#   ConfigMap  → safe to store in git (no passwords, no tokens)
-#   Secret     → sensitive data (passwords, API keys, connection strings)
-#
-# HOW IT WORKS:
-# 1. You create the ConfigMap: kubectl apply -f configmap.yaml
-# 2. A Deployment references it with "envFrom.configMapRef"
-# 3. Kubernetes injects the key-value pairs as environment variables
-#    into every container of every Pod in that Deployment.
-#
-# WHY NOT JUST HARDCODE ENV VARS IN THE DEPLOYMENT YAML?
-# Separation of concerns. Config changes independently from app code.
-# You can swap values without touching the Deployment manifest.
-# =============================================================================
-
-apiVersion: v1          # The Kubernetes API version for this resource type
-kind: ConfigMap         # The type of Kubernetes object we're creating
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: ecommerce-config  # Name used to reference this ConfigMap from Deployments
-  # No "namespace" here means it goes into the "default" namespace,
-  # which is fine for a single-app minikube cluster.
-
+  name: ecommerce-config
 data:
-  # ---------------------------------------------------------------------------
-  # Backend environment variables
-  # ---------------------------------------------------------------------------
-
-  # Keep as "development" so session cookies work over plain HTTP on minikube.
-  # In a real production cluster with HTTPS/TLS, change this to "production".
   NODE_ENV: "development"
-
   PORT: "5000"
-
-  # The CLIENT_ORIGIN is what the backend's CORS policy allows.
-  # With the NGINX proxy approach, the browser talks to the SAME origin as
-  # the frontend (e.g., http://<minikube-ip>:30080), so this is the frontend URL.
-  #
-  # HOW TO FIND YOUR VALUE:
-  #   1. Run: minikube ip          → e.g., 192.168.49.2
-  #   2. Frontend NodePort is:     30080
-  #   3. Set this to:              http://192.168.49.2:30080
-  #
-  # Update this with your actual minikube IP before deploying!
   CLIENT_ORIGIN: "http://localhost:30080"
