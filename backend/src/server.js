@@ -8,6 +8,8 @@ import cookieParser from "cookie-parser";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 
+import client from "prom-client";
+
 import { connectDb } from "./config/db.js";
 import { notFound, errorHandler } from "./middleware/error.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -16,6 +18,40 @@ import orderRoutes from "./routes/order.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 
 const app = express();
+
+const register = new client.Registry();
+register.setDefaultLabels({ app: "ecommerce-backend" });
+client.collectDefaultMetrics({ register });
+
+const httpRequestDuration = new client.Histogram({
+  name: "http_request_duration_seconds",
+  help: "Duration of HTTP requests in seconds",
+  labelNames: ["method", "route", "status_code"],
+  buckets: [0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+});
+const httpRequestsTotal = new client.Counter({
+  name: "http_requests_total",
+  help: "Total number of HTTP requests",
+  labelNames: ["method", "route", "status_code"],
+});
+register.registerMetric(httpRequestDuration);
+register.registerMetric(httpRequestsTotal);
+
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on("finish", () => {
+    const route = req.route?.path || req.baseUrl || req.path || "unknown";
+    const labels = { method: req.method, route, status_code: res.statusCode };
+    end(labels);
+    httpRequestsTotal.inc(labels);
+  });
+  next();
+});
+
+app.get("/metrics", async (_req, res) => {
+  res.set("Content-Type", register.contentType);
+  res.end(await register.metrics());
+});
 
 // #region agent log
 const debugLog = (payload) =>
