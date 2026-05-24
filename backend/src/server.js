@@ -73,25 +73,13 @@ const debugLog = (payload) =>
 // #endregion
 
 process.on("uncaughtException", (err) => {
-  // #region agent log
-  debugLog({
-    hypothesisId: "H5",
-    location: "server.js:uncaughtException",
-    message: "Uncaught exception during backend runtime",
-    data: { name: err?.name, message: err?.message },
-  });
-  // #endregion
+  console.error("UNCAUGHT EXCEPTION:", err);
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
-  // #region agent log
-  debugLog({
-    hypothesisId: "H5",
-    location: "server.js:unhandledRejection",
-    message: "Unhandled promise rejection during backend runtime",
-    data: { reason: String(reason) },
-  });
-  // #endregion
+  console.error("UNHANDLED REJECTION:", reason);
+  process.exit(1);
 });
 
 // #region agent log
