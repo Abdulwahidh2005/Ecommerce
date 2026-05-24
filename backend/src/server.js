@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
@@ -163,6 +165,15 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.resolve(__dirname, "../public");
+
+app.use(express.static(publicDir));
+app.get(/^\/(?!api|metrics).*/, (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
 
 app.use(notFound);
 app.use(errorHandler);
