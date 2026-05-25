@@ -9,6 +9,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    reporters: process.env.GITHUB_ACTIONS
+      ? ["default", "github-actions"]
+      : ["default"],
   },
 });
 
