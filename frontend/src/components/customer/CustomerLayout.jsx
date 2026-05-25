@@ -74,7 +74,7 @@ export function CustomerLayout({ user, setUser }) {
             </div>
             <div className="min-w-0">
               <p className="font-bold text-slate-900 truncate">{user?.name || "Customer"}</p>
-              <p className="text-xs text-slate-500 truncate">Precise Member</p>
+              <p className="text-xs text-slate-500 truncate">Market place Member</p>
             </div>
           </div>
         </div>

@@ -171,7 +171,7 @@ export function ShopperDashboard({ user, setUser }) {
               </svg>
             </div>
             <div>
-              <p className="text-white font-extrabold tracking-tight leading-none">Precise</p>
+              <p className="text-white font-extrabold tracking-tight leading-none">Market place</p>
               <p className="text-indigo-400 text-xs font-medium mt-0.5">Seller Portal</p>
             </div>
           </div>

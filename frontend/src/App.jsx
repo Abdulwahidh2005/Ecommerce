@@ -43,7 +43,7 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <p className="text-sm text-slate-500 font-medium">Loading Precise…</p>
+          <p className="text-sm text-slate-500 font-medium">Loading Market place…</p>
         </div>
       </div>
     );
