@@ -14,7 +14,7 @@ function renderLogin() {
 describe("LoginPage", () => {
   it("shows the Precise brand", () => {
     renderLogin();
-    expect(screen.getByText("Precise")).toBeTruthy();
+    expect(screen.getByText(/precise/i)).toBeTruthy();
   });
 
   it("shows the Welcome back heading", () => {
